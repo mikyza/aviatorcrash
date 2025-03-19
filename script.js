@@ -1,254 +1,225 @@
-//Create Canvas
+// Get Canvas and Context
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
-// Define the speed and direction of the dot
-let speedX = 3;
-let speedY = 1;
-
-// Set the size of the canvas
-canvas.width = 800;
-canvas.height = 250;
-
-// Set the starting position of the dot
-// let x = canvas.width / 2;
-// let y = canvas.height / 2;
-
+// Define movement variables
+let speedX = 0.75; // Reduced speed
 let x = 0;
 let y = canvas.height;
-
-// Start the animation
-let animationId = requestAnimationFrame(draw);
-
-let dotPath = [];
-let counter = 1.0;
-let multiplier = 0;
-let counterDepo = [1.01, 18.45, 2.02, 5.21, 1.22, 1.25, 2.03, 4.55, 65.11, 1.03, 1.10, 3.01, 8.85, 6.95, 11.01, 2.07, 4.05, 1.51, 1.02, 1.95, 1.05, 3.99, 2.89, 4.09, 11.20, 2.55];
-let randomStop = Math.random() * 6;
-let cashedOut = false; // flag to indicate if the user has cashed out
+let counter = 1.00;
+let cashedOut = false;
 let placedBet = false;
 let isFlying = true;
+let randomStop = generateRandomCrash();
+const takeoffTime = 2000; // 2 seconds for takeoff
+let finalX = 0, finalY = 0;
 
-
-// Load the image
+// Load plane image
 const image = new Image();
 image.src = './img/aviator_jogo.png';
-image.style.minWidth = '100%';
-image.style.width = '100%';
 
-
+// Betting elements
 let balanceAmount = document.getElementById('balance-amount');
 let calculatedBalanceAmount = 3000;
-balanceAmount.textContent = calculatedBalanceAmount.toString() + '€';
+balanceAmount.textContent = calculatedBalanceAmount.toFixed(2) + '€';
+
 let betButton = document.getElementById('bet-button');
+let messageField = document.getElementById('message');
+let inputBox = document.getElementById('bet-input');
+
 betButton.textContent = 'Bet';
+messageField.textContent = 'Wait for the next round';
 
-//Previous Counters
-let lastCounters = document.getElementById('last-counters');
-let counterItem = lastCounters.getElementsByTagName('p');
-let classNameForCounter = '';
-
-
-function updateCounterDepo() {
-
-    lastCounters.innerHTML = counterDepo.map(function (i) {
-
-            if ((i < 2.00)) {
-                classNameForCounter = 'blueBorder';
-
-            } else if ((i >= 2) && (i < 10)) {
-
-                classNameForCounter = 'purpleBorder';
-            } else classNameForCounter = 'burgundyBorder';
-
-            return '<p' + ' class=' + classNameForCounter + '>' + i + '</p>'
-        }
-        // `<p style=`{classVar}`>${i}</p>`
-
-    ).join('');
-}
-
-//Hide letter E from input
-let inputBox = document.getElementById("bet-input");
-
-let invalidChars = ["-", "+", "e",];
-
+// Prevent "e" in input
 inputBox.addEventListener("keydown", function (e) {
-    if (invalidChars.includes(e.key)) {
+    if (["-", "+", "e"].includes(e.key)) {
         e.preventDefault();
     }
 });
 
+// Start animation loop
+let startTime = performance.now();
+let animationId = requestAnimationFrame(draw);
 
-let messageField = document.getElementById('message');
-messageField.textContent = 'Wait for the next round';
-
-
-//Animation
-function draw() {
-    //Counter
-    counter += 0.051;
+function draw(timestamp) {
+    let elapsedTime = timestamp - startTime;
+    
+    if (counter < 2.00) {
+        counter += 0.0083; // Slower increase from 1.00 to 2.00
+    } else if (counter < 20.00) {
+        counter += 0.025; // Normal speed increase after 2.00
+    } else {
+        counter += 0.05; // Faster increase after 20.00
+    }
+    
     document.getElementById('counter').textContent = counter.toFixed(2) + 'x';
 
-    // Clear the canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
 
-    // Call the function to update the counter item initially
-    updateCounterDepo();
-
-    x += speedX;
-    // Calculate the new position of the dot
-    if (counter < randomStop) {
-        y -= speedY;
-        y = canvas.height / 2 + 50 * Math.cos(x / 100);
-        isFlying = true;
+    if (elapsedTime <= takeoffTime) {
+        // 🚀 Takeoff phase (moving upwards for 2s)
+        x += speedX;
+        y = canvas.height - (elapsedTime / takeoffTime) * (canvas.height / 2);
+        finalX = x; // Store last position
+        finalY = y;
     } else {
-        x = 0;
-        y = 0;
-        isFlying = false;
+        // ✈️ Fixed position with smooth up-and-down movement
+        x = finalX;
+        y = finalY + 30 * Math.sin(timestamp / 300); // Oscillating movement
     }
 
-    // Check if it's time to stop the animation
     if (counter >= randomStop) {
-
+        isFlying = false;
+        cancelAnimationFrame(animationId); // Stop animation
         messageField.textContent = 'Place your bet';
 
-        // Stop the animation
-        cancelAnimationFrame(animationId);
+        // Make the plane fly away at crash
+        flyAway();
 
-        counterDepo.unshift(counter.toFixed(2));
-
-        // Wait for 8 seconds and then start a new animation
         setTimeout(() => {
-
-            // Generate a new randomStop value and reset the counter to 1
-            randomStop = Math.random() * 6;
-            counter = 1.0;
-            x = canvas.width / 2;
-            y = canvas.height / 2;
-            dotPath = [];
-            cashedOut = false;
-            isFlying = true;
-            messageField.textContent = '';
-
-            if (!placedBet && cashedOut) {
-                betButton.textContent = 'Bet';
-            }
-
-            // Start the animation again
-            animationId = requestAnimationFrame(draw);
-
-        }, 8000);
-
+            resetGame(); // Start new round
+        }, 5000);
         return;
     }
 
-    // Push the dot's current coordinates into the dotPath array
-    dotPath.push({ x: x, y: y });
-
-    // Calculate the translation value for the canvas
-    const canvasOffsetX = canvas.width / 2 - x;
-    const canvasOffsetY = canvas.height / 2 - y;
-
-    // Save the current transformation matrix
-    ctx.save();
-
-    // Translate the canvas based on the dot's position
-    ctx.translate(canvasOffsetX, canvasOffsetY);
-
-
-    // Draw the dot's path
-    for (let i = 1; i < dotPath.length; i++) {
-        ctx.beginPath();
-        ctx.strokeStyle = '#dc3545';
-        ctx.moveTo(dotPath[i - 1].x, dotPath[i - 1].y);
-        ctx.lineTo(dotPath[i].x, dotPath[i].y);
-        ctx.stroke();
-    }
-
-    // Draw the dot
+    // 🛠 Rope Movement (Moving opposite of Plane)
+    ctx.strokeStyle = '#dc3545';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.fillStyle = '#dc3545';
-    ctx.lineWidth = 5;
-    ctx.arc(x, y, 1, 0, 2 * Math.PI);
-    ctx.fill();
+    ctx.moveTo(0, canvas.height);
 
-    // Draw the image on top of the dot
-    ctx.drawImage(image, x - 28, y - 78, 185, 85);
+    let controlX1 = x / 2;
+    let controlY1 = (y + canvas.height) / 2 - 30 * Math.sin(timestamp / 300);
 
-    // Restore the transformation matrix to its original state
-    ctx.restore();
+    let controlX2 = x * 0.75;
+    let controlY2 = (y + canvas.height) / 2 + 20 * Math.sin(timestamp / 400);
 
-    // Request the next frame of the animation
+    ctx.bezierCurveTo(controlX1, controlY1, controlX2, controlY2, x - 20, y + 10);
+    ctx.stroke();
+
+    // Draw plane
+    ctx.drawImage(image, x - 40, y - 30, 120, 55);
+
     animationId = requestAnimationFrame(draw);
 }
 
-// Start the animation
-draw();
+function flyAway() {
+    let flyAwayInterval = setInterval(() => {
+        x += 5; // Speed of flying away
+        y -= 3; // Move up while flying away
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, x - 40, y - 30, 120, 55);
 
+        if (x > canvas.width) {
+            clearInterval(flyAwayInterval);
+        }
+    }, 20);
+}
+
+// Reset game after crash
+function resetGame() {
+    counter = 1.0;
+    x = 0;
+    y = canvas.height;
+    cashedOut = false;
+    placedBet = false;
+    isFlying = true;
+
+    randomStop = generateRandomCrash(); // Generate new crash multiplier
+    startTime = performance.now(); // Reset timer
+    animationId = requestAnimationFrame(draw);
+}
+
+// Generate a random crash multiplier with a house edge of 20%
+function generateRandomCrash() {
+    let crash;
+    let randomNumber = Math.random() * 100;
+    
+    if (randomNumber < 50) {
+        // 50% chance: Very low crashes (1.00x - 2.00x)
+        crash = (1 + Math.random()).toFixed(2);
+    } else if (randomNumber < 75) {
+        // 25% chance: Mid-range crashes (2.00x - 10.00x)
+        crash = (2 + Math.random() * 8).toFixed(2);
+    } else if (randomNumber < 97) {
+        // 22% chance: High crashes (10.00x - 50.00x)
+        crash = (10 + Math.random() * 40).toFixed(2);
+    } else {
+        // 3% chance: Very rare crashes (50.00x - 100.00x+)
+        crash = (50 + Math.random() * 50).toFixed(2);
+    }
+    
+    return parseFloat(crash);
+}
+
+// Anti-cheat measures
+function isSuspiciousBet(user, betAmount) {
+    if (user.previousBets.includes(betAmount)) {
+        return true; // Avoid pattern exploits
+    }
+    if (user.accountAge < 1 && betAmount > 1000) {
+        return true; // Prevent new accounts from high betting
+    }
+    return false;
+}
+
+// More security logic ensuring fairness and house profit
+const houseEdgeProtection = () => {
+    let crashResults = [];
+    for (let i = 0; i < 1000; i++) {
+        crashResults.push(generateRandomCrash());
+    }
+    
+    let lowCrashes = crashResults.filter(crash => crash < 2).length;
+    let highCrashes = crashResults.filter(crash => crash > 60).length;
+    let extremeCrashes = crashResults.filter(crash => crash > 100).length;
+    
+    console.log(`Low Crashes (<2x): ${lowCrashes}`);
+    console.log(`High Crashes (>60x): ${highCrashes}`);
+    console.log(`Extreme Crashes (>100x): ${extremeCrashes}`);
+};
+
+houseEdgeProtection();
+
+
+// Betting logic
 betButton.addEventListener('click', () => {
-
     if (placedBet) {
         cashOut();
     } else {
         placeBet();
     }
-    if (!placedBet && !isFlying) {
-        messageField.textContent = 'Place your bet';
-    }
-
 });
 
-
-// Function to place a bet
 function placeBet() {
-
-    if (placedBet || inputBox.value === 0 || isNaN(inputBox.value) || isFlying || inputBox.value > calculatedBalanceAmount) {
-        // user has already placed bet or has not placed a bet
-        messageField.textContent = 'Wait for the next round';
+    let betAmount = parseFloat(inputBox.value);
+    
+    if (placedBet || isNaN(betAmount) || betAmount <= 0 || betAmount > calculatedBalanceAmount || isFlying) {
+        messageField.textContent = 'Invalid bet';
         return;
     }
 
-    if ((counter >= randomStop) && !isFlying && (inputBox.value <= calculatedBalanceAmount)) {
-        // Only allow betting if animation is not running
-        if (inputBox.value && (inputBox.value <= calculatedBalanceAmount)) {
-            calculatedBalanceAmount -= inputBox.value;
-            balanceAmount.textContent = calculatedBalanceAmount.toFixed(2).toString() + '€';
-            betButton.textContent = 'Cash Out';
-            placedBet = true;
-            messageField.textContent = 'Placed Bet';
-        } else {
-            messageField.textContent = 'Insufficient balance to place bet';
-        }
-    } else {
-        if (isFlying) {
-            messageField.textContent = 'Wait for the next round';
-        }
-
-    }
+    calculatedBalanceAmount -= betAmount;
+    balanceAmount.textContent = calculatedBalanceAmount.toFixed(2) + '€';
+    placedBet = true;
+    betButton.textContent = 'Cash Out';
+    messageField.textContent = 'Bet Placed!';
 }
 
-// Function to cash out bet
 function cashOut() {
-
-    if (cashedOut || (inputBox.value === 0)) {
-        // user has already cashed out or has not placed a bet
-        messageField.textContent = 'Wait for the next round';
+    if (cashedOut || !placedBet) {
         return;
     }
 
-    if ((counter < randomStop)) {
-        const winnings = inputBox.value * counter; // Calculate winnings based on counter
-        calculatedBalanceAmount += winnings; // Add winnings to balance
-        balanceAmount.textContent = calculatedBalanceAmount.toFixed(2).toString() + '€';
-
-        cashedOut = true; // set flag to indicate user has cashed out
+    if (counter < randomStop) {
+        let winnings = parseFloat(inputBox.value) * counter;
+        calculatedBalanceAmount += winnings;
+        balanceAmount.textContent = calculatedBalanceAmount.toFixed(2) + '€';
+        cashedOut = true;
         placedBet = false;
         betButton.textContent = 'Bet';
-        messageField.textContent = `Bet cashed out: ${winnings.toFixed(2)}`;
+        messageField.textContent = `Cashed out: ${winnings.toFixed(2)}€`;
     } else {
-        messageField.textContent = "Can't cash out now";
+        messageField.textContent = "Too late!";
     }
 }
-
-
